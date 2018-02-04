@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>PattyMills</title>
+        <style>
+            body,html {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+            }
+            
+            #canv {
+                margin-left: auto;
+                margin-right: auto;
+                display: block;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id='canv'></canvas>
+        <script src=sprite.js></script>
+        <script>
+            initSprites();
+            var ctx;
+            var sH = 640, sW = 480; // screen dimens
+            var fps = 120, lastTick, tickCount = 0;
+            var moving = 0; // 0 for no, 1 for yes. movement = flame behind ship
+            var mouseX = 0, mouseY = 0;
+            var speed = 400;
+            var keyPressed = [];
+            
+
+            var d = new Date();
+            lastTick = d.getTime();
+            //15x20 tiles
+            bg = [
+                [0,0,0,0,0,0,0,0,2,2,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,2,2,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,2,2,2,2,0,3,0],
+                [0,0,0,0,0,0,0,0,0,2,2,2,0,0,0],
+                [0,0,0,0,0,0,0,0,0,0,0,2,0,0,0],
+                [0,0,0,4,0,0,0,0,0,0,0,2,0,0,0],
+                [0,0,0,0,0,0,0,0,0,0,0,2,0,0,0],
+                [0,0,0,0,0,0,0,0,0,0,2,2,0,0,0],
+                [0,0,0,0,0,0,0,0,0,2,2,2,0,0,0],
+                [0,0,0,4,0,0,3,0,2,2,2,0,0,0,0],
+                [0,0,0,0,0,2,2,5,2,2,0,0,0,0,0],
+                [0,0,0,0,2,2,2,5,2,0,0,0,0,4,0],
+                [0,0,0,0,2,2,0,0,0,0,0,0,0,0,0],
+                [2,2,2,2,2,0,0,0,0,0,0,0,0,0,0],
+                [2,2,2,2,2,0,0,0,0,0,0,0,0,0,0],
+                [0,0,0,2,2,2,0,0,4,0,0,0,0,0,0],
+                [0,0,0,0,2,2,2,0,0,0,0,0,0,0,0],
+                [0,0,3,0,0,2,2,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,2,2,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,2,2,0,0,3,0,0,0,4,0],
+            ];
+            
+            function drawBG(ctx) {
+                for (var i = 0; i < 20; i++) {
+                    for (var j = 0; j < 15; j++) {
+                        img_grass.draw(ctx,j*32,i*32);
+                        if (bg[i][j] === 2)
+                            img_water.draw(ctx,j*32,i*32);
+                        else if (bg[i][j] === 1)
+                            img_rock.draw(ctx,j*32,i*32);
+                        else if (bg[i][j] === 3)
+                            img_sign.draw(ctx,j*32,i*32);
+                        else if (bg[i][j] === 4)
+                            img_stump.draw(ctx,j*32,i*32);
+                        else if (bg[i][j] === 5) {
+                            img_water.draw(ctx,j*32,i*32);
+                            img_rock.draw(ctx,j*32,i*32);
+                        }
+                    }
+                }
+            }
+
+
+            var canvas = document.getElementById("canv");
+            canvas.height = sH;
+            canvas.width = sW;
+            ctx = canvas.getContext('2d');
+            canvas.addEventListener('mousemove', function(evt) {
+                mouseX = evt.clientX - Math.floor((window.innerWidth - sW)/2);
+                mouseY = evt.clientY;
+            });
+            window.addEventListener('keydown', function(evt) {
+                switch (evt.keyCode) {
+                    case 65:
+                        keyPressed[65] = true;
+                        break;
+                    case 68:
+                        keyPressed[68] = true;
+                        break;
+                    case 83:
+                        keyPressed[83] = true;
+                        break;
+                    case 87:
+                        keyPressed[87] = true;
+                        break;
+                }
+            });
+            window.addEventListener('keyup', function(evt) {
+                switch (evt.keyCode) {
+                    case 65:
+                        delete keyPressed[65];
+                        break;
+                    case 68:
+                        delete keyPressed[68];
+                        break;
+                    case 83:
+                        delete keyPressed[83];
+                        break;
+                    case 87:
+                        delete keyPressed[87];
+                        break;
+                }
+            })
+            
+            function Ship(x, y, w, h, rotation) {
+                if (!x) this.midX = w/2;
+                else this.midX = x+w/2;
+                
+                if (!y) this.midY = h/2;
+                else this.midY = y+h/2;
+                
+                if (!rotation) this.rotation = 0;
+                else this.rotation = rotation;
+                
+                this.w = w;
+                this.h = h;
+                this.sprite = img_ship[0];
+            }
+        
+            Ship.prototype.update = function() {
+                var distance = speed/fps;
+
+                // check if ship is travelling in two directions or just one (a vertical AND horizontal are pressed, BUT not two of the same orientation or they cancel out)
+                if (!(keyPressed[65] && keyPressed[68]) && !(keyPressed[83] && keyPressed[87]) &&
+                    ((keyPressed[65] || keyPressed[68]) && (keyPressed[83] || keyPressed[87]))) {
+                    distance = (distance) / (Math.sqrt(2));
+                }    
+                
+                var k_a = keyPressed[65], k_d = keyPressed[68];
+                var k_s = keyPressed[83], k_w = keyPressed[87];
+                
+                if (k_a) {
+                    this.midX -= distance;
+                }
+                if (k_d) {
+                    this.midX += distance;
+                }
+                if (k_w) {
+                    this.midY -= distance;
+                }
+                if (k_s) {
+                    this.midY += distance;
+                }
+
+                    
+                
+                // check for out of bounds
+                if (this.midX-this.w/2 < 0) this.midX = this.w/2;
+                if (this.midY-this.h/2 < 0) this.midY = this.h/2;
+                if (this.midX+this.w/2 > sW) this.midX = sW - this.w/2;
+                if (this.midY+this.h/2 > sH) this.midY = sH - this.h/2;
+            }    
+            
+            Ship.prototype.drawAngle = function(ctx, radians) {
+                this.rotation = radians;
+                
+                if (radians !== 0) {
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.save();
+                    ctx.translate(this.midX,this.midY);
+                    ctx.rotate(radians);
+                    this.sprite.draw(ctx,-this.w/2,-this.h/2);
+                    ctx.restore();
+                }
+                else {
+                    this.sprite.draw(ctx,this.midX-this.w/2,this.midY-this.h/2);
+                }
+            };
+            
+            player1 = new Ship(sW/2,sH/2,img_ship[1].w,img_ship[1].h,0);
+            
+            function getAngle(x,y) {
+                if (x-mouseX === 0) {
+                    if (y >= mouseY) return 0;
+                    return Math.PI;
+                }
+                
+                var angle = Math.atan(Math.abs(y-mouseY) / Math.abs(x-mouseX)) + Math.PI/2;
+                if (x < mouseX) {
+                    if (y < mouseY)
+                        return angle;
+                    else return Math.abs(angle - Math.PI);
+                }
+                else {
+                    if (y < mouseY)
+                        return angle*-1;
+                    else return angle + Math.PI;
+                }
+                
+            }
+            
+            function rotateY(radians,w,h) {
+                return (h/2)*Math.cos(radians) - (w/2)*Math.sin(radians);
+            }
+            
+            function rotateX(radians,w,h) {
+                /*
+                y' = y*cos(a) - x*sin(a)
+                x' = y*sin(a) + x*cos(a)
+                */
+                return (h/2)*Math.sin(radians) + (w/2)*Math.cos(radians);
+                
+            }
+            
+            function ai(x,y,w,h,rotation) {
+                this.x = x || sW/2;
+                this.y = y || 100;
+                this.w = img_tree.w;
+                this.h = img_tree.h;
+                this.rotation = rotation || 0;
+                this.sprite = img_tree;
+            }
+            
+            ai.prototype.draw = function(ctx) {
+                this.sprite.draw(ctx,this.x,this.y,this.w,this.h);
+            };
+            
+            var tree = new ai();
+            
+            
+            
+            window.onload = function() {
+                
+                draw();
+
+                
+                requestAnimationFrame(function gameloop() {
+                    player1.update();
+                    draw();
+                    
+                    requestAnimationFrame(gameloop);
+                }); 
+
+
+                function draw() {
+                    //update fps every 10 ticks
+                    tickCount++;
+                    if (tickCount % 10 === 0) {
+                        d = new Date();
+                        fps = parseInt(1000 / ((d.getTime() - lastTick)/10));
+                        lastTick = d.getTime();
+                    }
+                    
+                    ctx.fillStyle = '#d4eae6';
+                    ctx.fillRect(0,0,sW,sH);
+                    drawBG(ctx);
+                    
+                    
+                    ctx.fillStyle = '#000';
+                    ctx.fillText("fps: "+fps,15,25);
+
+                    tree.draw(ctx);
+                    player1.drawAngle(ctx, getAngle(player1.midX,player1.midY));
+                    
+                }
+            }
+            
+        </script>
+    </body>
+</html>
